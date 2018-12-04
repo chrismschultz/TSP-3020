@@ -1,8 +1,17 @@
-// Chris Schultz W05977190
-// Kelby Funk W04679495
+// Chris Schultz
+// Kelby Funk
 // COSC 3020
-// Assignment 03
+// Assignment 03 - Traveling Salesman
 // 30 Nov 2018
+
+/* REFERENCES AND CITATIONS
+ *   Discussion in the engineering lab with other students concerning high-level
+ *     implementations
+ *   Online references to Held-Karp and articles
+ *     https://people.eecs.berkeley.edu/~vazirani/algorithms/chap6.pdf
+ *     https://medium.com/basecs/speeding-up-the-traveling-salesman-using-dynamic-programming-b76d7552e8dd
+ *   In-class lecture notes on dynamic programming
+ */
 
 //
 //// HELD-KARP ALGORITHMS, BOTH NORMAL AND DYNAMIC, AND RELATED FUNCTIONS
@@ -30,13 +39,87 @@ function heldKarp(cities, start){
     }
 }
 
-function heldKarpAlt(graph, start){
-    // algorithm goes here
+function heldKarpAlt(cities, start){
+    if (cities.length < 2){
+        return 0;
+    }
+    // memoTable will be the way we hold distances that have already
+    // been computed. For every index, there are three elements: in order,
+    // the subset of cities already visited, the city we are going through
+    // to reach that subset, and the minimum distance produced from that
+
+    // this is some initial setup
+    var memoTable = [];
+    var validCities = [];
+    for (var i = 0; i < cities.length; i++){
+        if (start == i){
+            continue;
+        }
+        validCities.push(i);
+    }
+    var subsets = generateSubsets(validCities);
+    for (var i = 0; i < validCities.length; i++){
+        memoTable.push([[], validCities[i], 0]);
+    }
+
+    // this constructs the memo table with possible sets and cities
+    for (var i = 1; i < validCities.length; i++){
+        var temp = [];
+        var subsetsCopy = subsets.filter(set => set.length == i);
+        for (var j = 0; j < subsetsCopy.length; j++){
+            for (var k = 0; k < validCities.length; k++){
+                if (subsetsCopy[j].includes(validCities[k])){
+                    continue;
+                }
+                temp.push([subsetsCopy[j], validCities[k], -1]);
+            }
+        }
+        for (var x = 0; x < temp.length; x++){
+            memoTable.push(temp[x]);
+        }
+    }
+    memoTable.push([validCities, start, -1]);
+
+    var minDist = [];
+    var tempStuff = [];
+    var accumulator = 0;
+
+    // this section calculates all the minimum distances
+    // in the memo table
+    for (var i = 0; i < memoTable.length; i++){
+        var currentLength = memoTable[i][0].length;
+        if (memoTable[i][0] == 0){
+            continue;
+        }
+        var tempStuff = memoTable.filter(set => set[0].length == currentLength - 1);
+        for (var k = 0; k < memoTable[i][0].length; k++){
+            var copyMemoLocation = [];
+            copyMemoLocation.push(memoTable[i][0].slice());
+            var oldCity = memoTable[i][0][k];
+            var currentCity = memoTable[i][1];
+            var lookupSet = copyMemoLocation.slice();
+            lookupSet[0].splice(k, 1);
+            for (var m = 0; m < tempStuff.length; m++){
+                var comparisonSet = tempStuff[m][0].slice();
+                if (testEqualArrays(comparisonSet, lookupSet[0]) &&
+                    (tempStuff[m][1] == oldCity)){
+                        accumulator = accumulator + tempStuff[m][2];
+                    }
+            }
+            minDist.push(accumulator + findRouteDist(cities, [currentCity, oldCity]));
+            accumulator = 0;
+        }
+        memoTable[i][2] = Math.min(...minDist);
+        minDist = [];
+    }
+    var x = memoTable.pop();
+    var trueMin = x[2];
+    return trueMin;
 }
 
 // generates an undirected graph - an adjacency matrix
-function generateGraph(){
-    var mySize = 6;
+function generateGraph(n){
+    var mySize = n;
     var myMatrix = [];
 
     for (var i = 0; i < mySize; i++){
@@ -87,7 +170,7 @@ function printMatrix(matrix){
 // function to make a "deep copy" of a graph
 // this is here because both slice() and concat()
 // both did not play nice with the algorithm
-// thanks for nothings stack overflow
+// thanks for nothing, stack overflow
 function copyGraph(matrix){
     var why = [];
     for (var i = 0; i < matrix.length; i++){
@@ -97,6 +180,21 @@ function copyGraph(matrix){
         }
     }
     return why;
+}
+
+// a function that generates all possible subsets of an array
+// and then sorts them in order of the length of the set
+function generateSubsets(array){
+    var collect = [];
+    for (var i = 0; i < (Math.pow(2, array.length)); i++){
+        var temp = [];
+        for (var j = 0; j < array.length; j++){
+            if ((i & (1 << j))) temp.push(array[j]);
+        }
+        collect.push(temp);
+    }
+    collect.sort(function(a, b){return a.length - b.length});
+    return collect;
 }
 
 //
@@ -109,9 +207,11 @@ function stocSearch(cities, myRoute){
     var dist = findRouteDist(cities, myRoute);
     var originalDist = dist;
     var x = -1;
+    // the cutoff will be either a route that is 1/3 of the original distance
+    //   or a route that is the length of the graph * 3
     var cutoff1 = 0.33 * originalDist;
-    var cutoff2 = myRoute.length * 1.5;
-    do{
+    var cutoff2 = myRoute.length * 3;
+    do{ 
         for (var i = 1; i < cities.length; i++){
             var k = Math.floor(Math.random() * (cities.length - i)) + i;
             if (k == x){
@@ -129,13 +229,7 @@ function stocSearch(cities, myRoute){
         if ((dist <= cutoff1) || (dist <= cutoff2)){break;}
     }while(((testEqualArrays(myRoute, original) == false)));
    
-    console.log("Starting from city", myRoute[0], ", the shortest path I could find is of length", dist);
-    if (fastest.length == 0){
-        console.log("Route is", myRoute);
-    }
-    else{
-        console.log("Route is", fastest);
-    }
+    return dist;
 }
 
 // a function that takes a graph and returns a random route
@@ -210,64 +304,39 @@ var testArrayFour = generateGraph();
 //// ALL OF THE TEST CASES FOR HELD-KARP ALGORITHM
 //
 
-/*
-console.log("------------------------Testing Held-Karp!-------------------------");
-// best tour on this should return 6
-console.log("The graph is represented as...");
-printMatrix(testArrayOne);
-console.time('Time to execute heldKarp');
-console.log("Best tour from beginning (City A/City 1) is", heldKarp(testArrayOne, 0));
-console.timeEnd('Time to execute heldKarp');
-console.log("-------------------------------------------------------------------");
+// we removed the original test cases to save space, but we tested all the algorithms on
+// these four graphs. the first three had defined cases, and returned as the minimum tour
+// 6, 9, and 6 respectively. the fourth one is to facilitate easy testing at high inputs
 
-// best tour on this should return 9 and 12 respectively
-console.log("The graph is represented as...");
-printMatrix(testArrayTwo);
-console.time('Time to execute heldKarp');
-console.log("Best tour from beginning (City A/City 1) is", heldKarp(testArrayTwo, 0));
-console.timeEnd('Time to execute heldKarp');
-console.time('Time to execute heldKarp');
-console.log("Best tour from second city (City B/City 2) is", heldKarp(testArrayTwo, 1));
-console.timeEnd('Time to execute heldKarp');
-console.log("-------------------------------------------------------------------");
-
-// best tour on this should return 6
-console.log("The graph is represented as...");
-printMatrix(testArrayThree);
-console.time('Time to execute heldKarp');
-console.log("Best tour from beginning (City A/City 1) is", heldKarp(testArrayThree, 0));
-console.timeEnd('Time to execute heldKarp');
-console.log("-------------------------------------------------------------------");
-
-// testing a random big graph
-console.log("The graph is represented as...");
-printMatrix(testArrayFour);
-console.time('Time to execute heldKarp');
-console.log("Best tour from beginning (City A/City 1) is", heldKarp(testArrayFour, 0));
-console.timeEnd('Time to execute heldKarp');
-
-console.log();
-
-// testing the stochastic search algorithm
-console.log("--------------------Testing Stochastic Search!---------------------")
-printMatrix(testArrayThree);
-console.time('Time to execute stochastic search');
-stocSearch(testArrayThree, generateRoute(testArrayThree));
-console.timeEnd('Time to execute stochastic search');
-console.log("-------------------------------------------------------------------")
-*/
-
-// testing the stochastic search algorithm on something big
-printMatrix(testArrayFour);
-console.time('Time to execute stochastic search');
-stocSearch(testArrayFour, generateRoute(testArrayFour));
-console.timeEnd('Time to execute stochastic search');
-console.log("-------------------------------------------------------------------");
-console.log();
 console.log("-----------------------Testing Held-Karp!--------------------------");
-printMatrix(testArrayThree);
-console.log(heldKarpAlt(testArrayThree, 0));
-console.log();
-console.log("--------------------------Other Tests!-----------------------------");
-printMatrix(testArrayTwo);
-heldKarpAlt(testArrayTwo, 0);
+for (var i = 3; i <= 50; i++){
+    var myMatrix = generateGraph(i);
+    console.time('Time to execute Held Karp')
+    console.log("On a graph of size", i, "the shortest path I could find is of length",
+                heldKarpAlt(myMatrix, 0));
+    console.timeEnd('Time to execute Held Karp');
+    console.log();
+}
+
+console.log("-------------------Testing Stochastic Search!----------------------");
+for (var i = 3; i <= 50; i++){
+    myMatrix = generateGraph(i);
+    myRoute = generateRoute(myMatrix);
+    console.time('Time to execute stochastic search');
+    console.log("On a graph of size", i, "starting from", myRoute[0], "the shortest",
+                 "path I could find is of length", stocSearch(myMatrix, myRoute));
+    console.timeEnd('Time to execute stochastic search');
+    console.log();
+}
+
+console.log("-----------------Comparing Min Distances Found!--------------------");
+for (var i = 0; i <= 11; i++){
+    myMatrix = generateGraph(i);
+    myRoute = generateRoute(myMatrix);
+    var start = myRoute[0];
+    console.log("For a graph of size", i, "the Held-Karp algorithm returned the optimal",
+                "tour with a distance of", heldKarpAlt(myMatrix, start));
+    console.log("For the same graph, the stochastic search algorithm found a tour",
+                "with a distance of", stocSearch(myMatrix, myRoute));
+    console.log();
+}
